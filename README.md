@@ -13,3 +13,13 @@ python main.py
 ```
 
 I have also included a `requirements.txt` file if you would rather create your python environment with that file 
+
+# How to use Docker
+
+You can run the code in a docker container using the following code.
+
+```
+docker compose up --detach
+```
+
+This will run the application on local port `2222`. I recommend running the application detached as the debug is cluttered with numpy warnings. 

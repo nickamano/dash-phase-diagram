@@ -1,0 +1,7 @@
+services:
+  web:
+    build: .
+    ports:
+      - "2222:8050"
+    volumes:
+      - .:/code

@@ -11,6 +11,9 @@ x_grid = 0.01
 # Mole fraction range from 0 to 1 (inclusive with x_grid increments)
 x = np.arange(0,1+x_grid,x_grid)
 
+# Used to silence arithmetic errors that arise due to log
+np.seterr(divide='ignore', invalid='ignore')
+
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -91,8 +94,8 @@ app.layout = html.Div([
                                 marks={i * 10 : '{}'.format(i*10) for i in range(0,10)},
                                 id='SBL'),
                         ], style={'width': '39%', "text-align": "left", 'float':'left', 'min-width':'480px'})
-                    ])
-            ])
+                    ]),
+            html.Footer([dcc.Markdown('''By Nicholas Amano at the University of Michigan''')])])
 
 @callback(
     Output('3D-Gibbs', 'figure'),
@@ -210,4 +213,4 @@ def reset_view(_):
     return visualize_convex_hull(generate_data(x, T_range), phases, x, T_range), 10000, 5000, 0, -35000, -38000, 11.1, 2.4, -20000, -25000, 21.6, 15
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False, host='0.0.0.0', port=8050)
