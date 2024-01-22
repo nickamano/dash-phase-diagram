@@ -1,6 +1,6 @@
 from dash import Dash, html, dcc, Input, Output, State, callback
 import numpy as np
-from convexhull import generate_data, visualize_convex_hull
+from app.convexhull import generate_data, visualize_convex_hull
 
 # Phases of interest
 phases = ['A_solution','B_solution', 'AB_solution', 'liquid']
