@@ -1,6 +1,7 @@
 from dash import Dash, html, dcc, Input, Output, State, callback
 import numpy as np
-from app.convexhull import generate_data, visualize_convex_hull
+import flask
+from app.app.convexhull import generate_data, visualize_convex_hull
 
 # Phases of interest
 phases = ['A_solution','B_solution', 'AB_solution', 'liquid']
@@ -16,10 +17,10 @@ np.seterr(divide='ignore', invalid='ignore')
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+app = flask.Flask(__name__)
+dash_app = Dash(__name__, external_stylesheets=external_stylesheets, server = app, url_base_pathname = '/')
 
-app = Dash(__name__, external_stylesheets=external_stylesheets)
-
-app.layout = html.Div([
+dash_app.layout = html.Div([
                 html.Div([
                     html.Div([
                         dcc.Markdown('''3D Gibbs Free Energy Graph using Regular Solutions Model '''),
@@ -213,4 +214,4 @@ def reset_view(_):
     return visualize_convex_hull(generate_data(x, T_range), phases, x, T_range), 10000, 5000, 0, -35000, -38000, 11.1, 2.4, -20000, -25000, 21.6, 15
 
 if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=8050)
+    app.run(debug=True, host='0.0.0.0', port=8050)

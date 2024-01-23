@@ -24,5 +24,6 @@ six==1.16.0
 tenacity==8.2.3
 typing_extensions==4.9.0
 urllib3==2.1.0
-Werkzeug==3.0.1
+uWSGI==2.0.21
+Werkzeug==2.2.2
 zipp==3.17.0

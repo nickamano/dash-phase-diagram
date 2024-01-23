@@ -1,15 +1,20 @@
-FROM tiangolo/uwsgi-nginx:python3.11
-
-LABEL maintainer= "Nick Amano <namano@umich.edu>"
-
-COPY ./requirements.txt /tmp/requirements.txt
-
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
-
-RUN pip uninstall --yes werkzeug
-RUN pip install -v https://github.com/pallets/werkzeug/archive/refs/tags/2.0.3.tar.gz
+FROM python:3.11-slim
 
 COPY ./app /app
+COPY ./requirements.txt /tmp/requirements.txt
 
-ENV NGINX_WORKER_PROCESSES auto
+RUN apt-get clean \
+    && apt-get -y update
+
+RUN apt-get -y install nginx \
+    && apt-get -y install python3-dev \
+    && apt-get -y install build-essential
+
+RUN pip install -r /tmp/requirements.txt --src /usr/local/src
+
+COPY nginx.conf /etc/nginx
+COPY start.sh /app/start.sh
+
+WORKDIR /app
+
+CMD ["./start.sh"]
