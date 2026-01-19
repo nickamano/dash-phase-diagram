@@ -32,50 +32,66 @@ def generate_data(x, T_range, w_AB = 10000, L0= 5000, L1 =0, H_A = -35000, H_B =
     # Initialize G_data dictionary
     G_data = {'xG_Asolution':[],'xG_Bsolution':[], 'xG_ABsolution':[], 'xG_liquid':[]}
 
-    # Loop through each temperature
-    for T in T_range:
+    # Broadcast for vectorized interaction
+    # T shape: (M,) -> (M, 1)
+    # x shape: (N,) -> (1, N)
+    T = T_range[:, np.newaxis]
+    X = x[np.newaxis, :]
+    
+    ones_like_x = np.ones_like(X)
+    
+    # ----------------------------------------------
+    # Calculate G for pure components and solutions
+    # ----------------------------------------------
+    
+    # Pure A and B (M, 1)
+    G_A = H_A - S_A * T
+    G_B = H_B - S_B * T
+    
+    # Pre-calculate entropy term (M, N)
+    # x*log(x) + (1-x)*log(1-x)
+    # Handle x=0 and x=1 carefully to avoid NaN from log(0)
+    # np.log(0) is -inf, 0*-inf is nan.
+    # We use a safe computation
+    with np.errstate(divide='ignore', invalid='ignore'):
+        term_entropy = X * np.log(X) + (1 - X) * np.log(1 - X)
+    term_entropy = np.nan_to_num(term_entropy) # Replace NaN with 0
+    
+    mix_entropy = R * T * term_entropy
+    
+    # --- Dilute Solution A ---
+    # G = (1-x)GA + x(GB+1000) + RT(...) + x(1-x)wA
+    # Shapes: (1,N)* (M,1) -> (M,N)
+    G_Asolution = (1 - X) * G_A + X * (G_B + 1000) + mix_entropy + X * (1 - X) * wA
+    # Boundaries: x=0 -> G_A, x=1 -> G_B
+    # Note: X is (1,N). X[0,0] is 0. X[0,-1] is 1.
+    # We enforce boundaries for all T
+    G_Asolution[:, 0] = G_A[:, 0]
+    G_Asolution[:, -1] = G_B[:, 0]
+    G_data['xG_Asolution'] = G_Asolution
 
-        #################################
-        # Free energies for pure A and pure B
-        G_A = H_A - S_A * T
-        G_B = H_B- S_B * T
+    # --- Dilute Solution B ---
+    G_Bsolution = (1 - X) * (G_A + 1000) + X * G_B + mix_entropy + X * (1 - X) * wB
+    G_Bsolution[:, 0] = G_A[:, 0]
+    G_Bsolution[:, -1] = G_B[:, 0]
+    G_data['xG_Bsolution'] = G_Bsolution
 
-        #################################
-        # Free energies for dilute solution A
-        G_Asolution = (1-x) * G_A + x * (G_B+1000) + R * T * (x * log(x) + (1-x) * log(1-x)) + x*(1-x)*wA
-        G_Asolution[0] = G_A
-        G_Asolution[len(x)-1] = G_B
-        xG_Asolution = [(xx,yy,'A_solution') for xx, yy in zip(x, G_Asolution)]
-        G_data['xG_Asolution'].append(xG_Asolution)
+    # --- Solid Solution AB ---
+    G_ABsolution = (1 - X) * G_A + X * G_B + mix_entropy + X * (1 - X) * w_AB
+    G_ABsolution[:, 0] = G_A[:, 0]
+    G_ABsolution[:, -1] = G_B[:, 0]
+    G_data['xG_ABsolution'] = G_ABsolution
 
-        # Free energies for dilute solution B
-        G_Bsolution = (1-x) * (G_A+1000) + x * G_B + R * T * (x * log(x) + (1-x) * log(1-x)) + x*(1-x)*wB
-        G_Bsolution[0] = G_A
-        G_Bsolution[len(x)-1] = G_B
-        xG_Bsolution = [(xx,yy,'B_solution') for xx, yy in zip(x, G_Bsolution)]
-        G_data['xG_Bsolution'].append(xG_Bsolution)
-
-        # Free energies for solid-solution AB
-        G_ABsolution = (1-x) * G_A + x * G_B + R * T * (x * log(x) + (1-x) * log(1-x)) + x*(1-x)*w_AB
-        G_ABsolution[0] = G_A
-        G_ABsolution[len(x)-1] = G_B
-
-        xG_ABsolution = xG_Bsolution = [(xx,yy,'AB_solution') for xx, yy in zip(x, G_ABsolution)]
-        G_data['xG_ABsolution'].append(xG_ABsolution)
-
-        #################################
-
-        # Free energies for pure liquid A and B
-        G_AL = H_AL - S_AL * T
-        G_BL = H_BL - S_BL * T
-
-        # Free energy of liquid
-        G_liquid = (1-x) * G_AL + x * G_BL + R * T * (x * log(x) + (1-x) * log(1-x)) + x*(1-x)*(L0 + L1 * (x-(1-x)))
-        G_liquid[0] = G_AL
-        G_liquid[len(x)-1] = G_BL
-
-        xG_liquid = [(xx,yy,'liquid') for xx, yy in zip(x, G_liquid)]
-        G_data['xG_liquid'].append(xG_liquid)
+    # ----------------------------------------------
+    # Liquid Phase
+    # ----------------------------------------------
+    G_AL = H_AL - S_AL * T
+    G_BL = H_BL - S_BL * T
+    
+    G_liquid = (1 - X) * G_AL + X * G_BL + mix_entropy + X * (1 - X) * (L0 + L1 * (X - (1 - X)))
+    G_liquid[:, 0] = G_AL[:, 0]
+    G_liquid[:, -1] = G_BL[:, 0]
+    G_data['xG_liquid'] = G_liquid
 
     return G_data
 
@@ -101,48 +117,57 @@ def visualize_convex_hull(G_data, phases, x, T_range, camera=None):
 
     Args:
         G_data (dict): The Gibbs free energy (J/mol) for each phase at every temperature
-            for every composition. Keys = phase_name. Values = list[list] where
-            the inner list is over compositions and the outer list is over temperature.
+            for every composition. Keys = phase_name. Values = np.array (M, N)
         phases (list): The list of phases interested
-        x (np.array): Composition vector
+        x (np.array): Composition vector # (N,)
 
     Returns:
         figure: The plotly figure that contains the Gibbs free energy graphs of each phase and the convex hull of the 
     '''
 
-    points_A = np.array([])
-    points_A = np.array([])
-    points_B = np.array([])
-    points_AB = np.array([])
-    points_liquid = np.array([])
-    lower_hull = np.array([])
-    x_3D = np.array([])
+    # Pre-allocate arrays for better performance
+    n_temps = len(T_range)
+    n_x = len(x)
+    
+    # G_data[...] are now (n_temps, n_x) arrays
+    points_A = G_data['xG_Asolution']
+    points_B = G_data['xG_Bsolution']
+    points_AB = G_data['xG_ABsolution']
+    points_liquid = G_data['xG_liquid']
+    
+    lower_hull = np.zeros((n_temps, n_x))
 
     # Remove phase labels
-    for i in range(0, len(T_range)):
-        point_A = [point[1] for point in G_data['xG_Asolution'][i]]
-        point_B = [point[1] for point in G_data['xG_Bsolution'][i]]
-        point_AB = [point[1] for point in G_data['xG_ABsolution'][i]]
-        point_liquid = [point[1] for point in G_data['xG_liquid'][i]]
-        points_A = np.append(points_A, point_A)
-        points_B = np.append(points_B, point_B)
-        points_AB = np.append(points_AB, point_AB)
-        points_liquid = np.append(points_liquid, point_liquid)
+    for i in range(0, n_temps):
+        # Extract data for this temperature step
+        row_A = points_A[i, :]
+        row_B = points_B[i, :]
+        row_AB = points_AB[i, :]
+        row_liquid = points_liquid[i, :]
         
-        G_combine = np.concatenate((point_A, point_B, point_AB, point_liquid))
-        points_G = np.stack((np.tile(x,4), G_combine)).T
+        # Concatenate for ConvexHull
+        G_combine = np.concatenate((row_A, row_B, row_AB, row_liquid))
+        
+        # Create (x, G) points. Tile x 4 times
+        points_G = np.column_stack((np.tile(x, 4), G_combine))
         
         hull = ConvexHull(points_G)
         
-        start = points_G[hull.vertices][points_G[hull.vertices][:, 0].argmin()]
-        end = points_G[hull.vertices][points_G[hull.vertices][:, 0].argmax()]
+        # Find start and end of the lower hull optimization
+        hull_points = points_G[hull.vertices]
+        start = hull_points[hull_points[:, 0].argmin()]
+        end = hull_points[hull_points[:, 0].argmax()]
         
-        lower_hull_seg = np.array([point for point in [points_G[i] for i in hull.vertices] if below_line(point, start, end)])
+        # Filter for lower hull
+        lower_hull_vertices = [point for point in hull_points if below_line(point, start, end)]
+        lower_hull_seg = np.array(lower_hull_vertices)
         
-        f = interpolate.interp1d(lower_hull_seg[:,0], lower_hull_seg[:,1],kind="linear")
+        # Interpolate
+        lower_hull_seg = lower_hull_seg[lower_hull_seg[:, 0].argsort()]
+        
+        f = interpolate.interp1d(lower_hull_seg[:,0], lower_hull_seg[:,1], kind="linear", bounds_error=False, fill_value="extrapolate")
 
-        lower_hull = np.append(lower_hull, f(x)+5)
-        x_3D = np.append(x_3D, x)
+        lower_hull[i, :] = f(x) + 5
         
         
 
@@ -157,11 +182,11 @@ def visualize_convex_hull(G_data, phases, x, T_range, camera=None):
     color_AB = 'yellow'
     color_liquid = 'blue'
 
-    scatter_two_phase = go.Surface(x=xx, y=yy, z=lower_hull.reshape(len(T_range),len(x)), colorscale=[[0, color_two_phase], [1,color_two_phase]] , name='Two Phase', showscale=False)
-    scatter_A = go.Surface(x=xx, y=yy, z=points_A.reshape(len(T_range),len(x)), colorscale=[[0, color_A], [1,color_A]], name='A', showscale=False)
-    scatter_B = go.Surface(x=xx, y=yy, z=points_B.reshape(len(T_range),len(x)), colorscale=[[0, color_B], [1,color_B]], name='B', showscale=False)
-    scatter_AB = go.Surface(x=xx, y=yy, z=points_AB.reshape(len(T_range),len(x)), colorscale=[[0, color_AB], [1,color_AB]], name='AB solution', showscale=False)
-    scatter_liquid = go.Surface(x=xx, y=yy, z=points_liquid.reshape(len(T_range),len(x)), colorscale=[[0, color_liquid], [1,color_liquid]], name='liquid', showscale=False)
+    scatter_two_phase = go.Surface(x=xx, y=yy, z=lower_hull, colorscale=[[0, color_two_phase], [1,color_two_phase]] , name='Two Phase', showscale=False)
+    scatter_A = go.Surface(x=xx, y=yy, z=points_A, colorscale=[[0, color_A], [1,color_A]], name='A', showscale=False)
+    scatter_B = go.Surface(x=xx, y=yy, z=points_B, colorscale=[[0, color_B], [1,color_B]], name='B', showscale=False)
+    scatter_AB = go.Surface(x=xx, y=yy, z=points_AB, colorscale=[[0, color_AB], [1,color_AB]], name='AB solution', showscale=False)
+    scatter_liquid = go.Surface(x=xx, y=yy, z=points_liquid, colorscale=[[0, color_liquid], [1,color_liquid]], name='liquid', showscale=False)
 
     if camera == None:
         camera = dict(up=dict(x=1, y=0, z=0),center=dict(x=0, y=0, z=0),eye=dict(x=0, y=0, z=-2.5))
