@@ -1,4 +1,4 @@
-from dash import Dash, html, dcc, Input, Output, State, callback
+from dash import Dash, html, dcc, Input, Output, State, callback, clientside_callback
 import numpy as np
 from convexhull import generate_data, visualize_convex_hull
 
@@ -15,9 +15,7 @@ x = np.arange(0,1+x_grid,x_grid)
 np.seterr(divide='ignore', invalid='ignore')
 
 
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-
-app = Dash(__name__, external_stylesheets=external_stylesheets)
+app = Dash(__name__)
 
 app.layout = html.Div([
                 html.Div([
@@ -117,71 +115,71 @@ def update_omega_AB(layout, w_AB, L0, L1, HA, HB, SA, SB, HAL, HBL, SAL, SBL):
     camera = dict(up=dict(x=1, y=0, z=0),eye=dict(x=0, y=0, z=-2.5))
     return visualize_convex_hull(generate_data(x, T_range, w_AB, L0, L1, HA, HB, SA, SB, HAL, HBL, SAL, SBL), phases, x, T_range, camera = camera)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$w_{ AB }$ Value: ' + value; }",
     Output('w_AB-disp', 'children'),
-    Input('w-AB', 'value'))
-def display_value(value):
-    return fr'$w_{{ AB }}$ Value: {value}'
+    Input('w-AB', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$L_{ 0 }$ Value: ' + value; }",
     Output('L0-disp', 'children'),
-    Input('L0', 'value'))
-def display_value(value):
-    return fr'$L_{{ 0 }}$ Value: {value}'
+    Input('L0', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$L_{ 1 }$ Value: ' + value; }",
     Output('L1-disp', 'children'),
-    Input('L1', 'value'))
-def display_value(value):
-    return fr'$L_{{ 1 }}$ Value: {value}'
+    Input('L1', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$H_{ A }$ Value: ' + value; }",
     Output('HA-disp', 'children'),
-    Input('HA', 'value'))
-def display_value(value):
-    return fr'$H_{{ A }}$ Value: {value}'
+    Input('HA', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$H_{ B }$ Value: ' + value; }",
     Output('HB-disp', 'children'),
-    Input('HB', 'value'))
-def display_value(value):
-    return fr'$H_{{ B }}$ Value: {value}'
+    Input('HB', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$S_{ A }$ Value: ' + value; }",
     Output('SA-disp', 'children'),
-    Input('SA', 'value'))
-def display_value(value):
-    return fr'$S_{{ A }}$ Value: {value}'
+    Input('SA', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$S_{ B }$ Value: ' + value; }",
     Output('SB-disp', 'children'),
-    Input('SB', 'value'))
-def display_value(value):
-    return fr'$S_{{ B }}$ Value: {value}'
+    Input('SB', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$H_{ AL }$ Value: ' + value; }",
     Output('HAL-disp', 'children'),
-    Input('HAL', 'value'))
-def display_value(value):
-    return fr'$H_{{ AL }}$ Value: {value}'
+    Input('HAL', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$H_{ BL }$ Value: ' + value; }",
     Output('HBL-disp', 'children'),
-    Input('HBL', 'value'))
-def display_value(value):
-    return fr'$H_{{ BL }}$ Value: {value}'
+    Input('HBL', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$S_{ AL }$ Value: ' + value; }",
     Output('SAL-disp', 'children'),
-    Input('SAL', 'value'))
-def display_value(value):
-    return fr'$S_{{ AL }}$ Value: {value}'
+    Input('SAL', 'value')
+)
 
-@callback(
+clientside_callback(
+    "function(value) { return '$S_{ BL }$ Value: ' + value; }",
     Output('SBL-disp', 'children'),
-    Input('SBL', 'value'))
-def display_value(value):
-    return fr'$S_{{ BL }}$ Value: {value}'
+    Input('SBL', 'value')
+)
 
 @callback(
     Output('3D-Gibbs', 'figure', allow_duplicate=True),

@@ -16,10 +16,11 @@ def run_benchmark():
     
     print("Starting visualization...")
     start = time.time()
-    # Mock camera to avoid None error if any (though code handles it)
-    visualize_convex_hull(G_data, phases, x, T_range)
+    fig = visualize_convex_hull(G_data, phases, x, T_range)
     vis_time = time.time() - start
     print(f"Visualize: {vis_time:.4f}s")
+    
+    print("Done.")
 
 if __name__ == "__main__":
     run_benchmark()
