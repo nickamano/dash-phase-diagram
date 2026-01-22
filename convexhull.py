@@ -135,50 +135,6 @@ def visualize_convex_hull(G_data, phases, x, T_range, camera=None):
     lower_hull_Z = np.zeros((n_T, n_x))
     lower_hull_Colors = np.zeros((n_T, n_x))
     
-    # Phase Index Map for identifying vertices
-    # 0: A, 1: B, 2: AB, 3: Liquid
-    # Each block has n_x points.
-    # Vertex index i:
-    # 0 to n_x-1: A
-    # n_x to 2n_x-1: B
-    # 2n_x to 3n_x-1: AB
-    # 3n_x to 4n_x-1: Liquid
-    
-    # Color codes for visualization
-    # 0: Two-phase or Multi-phase (Default Gray) - We will override this
-    # 1: A (Red)
-    # 2: B (Green)
-    # 3: AB (Yellow)
-    # 4: Liquid (Blue)
-    # 5: A + Liquid
-    # 6: B + Liquid
-    # 7: AB + Liquid
-    # 8: A + B
-    # 9: A + AB
-    # 10: B + AB
-    
-    # Mapping pairs to color codes
-    # Key: frozenset({phase_idx1, phase_idx2})
-    # pure phases are handled if p1==p2
-    
-    phase_indices = {0: 'A', 1: 'B', 2: 'AB', 3: 'L'}
-    
-    def get_color_code(p1, p2):
-        s = frozenset([p1, p2])
-        if len(s) == 1:
-            p = list(s)[0]
-            if p == 0: return 1 # A
-            if p == 1: return 2 # B
-            if p == 2: return 3 # AB
-            if p == 3: return 4 # L
-        else:
-            if s == frozenset([0, 3]): return 5 # A + L
-            if s == frozenset([1, 3]): return 6 # B + L
-            if s == frozenset([2, 3]): return 7 # AB + L
-            if s == frozenset([0, 1]): return 8 # A + B
-            if s == frozenset([0, 2]): return 9 # A + AB
-            if s == frozenset([1, 2]): return 10 # B + AB
-        return 0 # Fallback
 
     for i in range(n_T):
         # Gather points for this temp
@@ -268,13 +224,58 @@ def visualize_convex_hull(G_data, phases, x, T_range, camera=None):
             p1 = idx1 // n_x
             p2 = idx2 // n_x
             
-            code = get_color_code(p1, p2)
+            code = get_mixture_type(p1, p2)
             seg_color_map.append(code)
             
         seg_color_map = np.array(seg_color_map)
         
-        # Assign colors
-        lower_hull_Colors[i, :] = seg_color_map[seg_indices]
+        # Base codes for this row
+        row_codes = seg_color_map[seg_indices]
+        
+        # Apply Slash Pattern Dithering
+        # We need to assign specific sub-codes based on position (i, j)
+        # i is row index (Temperature), j is col index (Composition)
+        # We can use vectorization.
+        
+        j_indices = np.arange(n_x)
+
+        p = 16
+        mask = ((i + j_indices) % p) < p/2
+        
+        final_colors = np.zeros_like(row_codes)
+        
+        # Mapping logic:
+        # If code <= 4 (Single Phase) -> Keep code
+        # If code > 4 (Mixture) -> Map to pair based on mask
+        
+        # 5: A(Red)+L(Blue) -> 5, 6
+        # 6: B(Green)+L(Blue) -> 7, 8
+        # 7: AB(Yellow)+L(Blue) -> 9, 10
+        # 8: A(Red)+B(Green) -> 11, 12
+        # 9: A(Red)+AB(Yellow) -> 13, 14
+        # 10: B(Green)+AB(Yellow) -> 15, 16
+        
+        # Default pass-through
+        final_colors = row_codes.copy()
+        
+        # Mixture A+L (5)
+        # Mask True -> 5 (Red-ish), False -> 6 (Blue-ish)
+        # We use boolean indexing
+        
+        # Helper to apply mask
+        def apply_mix(code_val, c1, c2):
+            is_mix = (row_codes == code_val)
+            final_colors[is_mix & mask] = c1
+            final_colors[is_mix & ~mask] = c2
+
+        apply_mix(5, 5, 6)   # A + L
+        apply_mix(6, 7, 8)   # B + L
+        apply_mix(7, 9, 10)  # AB + L
+        apply_mix(8, 11, 12) # A + B
+        apply_mix(9, 13, 14) # A + AB
+        apply_mix(10, 15, 16)# B + AB
+        
+        lower_hull_Colors[i, :] = final_colors
 
 
     # Create grid for plotting
@@ -300,26 +301,50 @@ def visualize_convex_hull(G_data, phases, x, T_range, camera=None):
     # We need to constructing a colorscale that maps specific integers to specific colors.
     # range 0 to 10.
     
-    discrete_colors = [
-        [0.0, 'gray'], [0.09, 'gray'],
-        [0.1, 'red'], [0.19, 'red'],       # 1
-        [0.2, 'green'], [0.29, 'green'],   # 2
-        [0.3, 'yellow'], [0.39, 'yellow'], # 3
-        [0.4, 'blue'], [0.49, 'blue'],     # 4
-        [0.5, 'purple'], [0.59, 'purple'], # 5
-        [0.6, 'cyan'], [0.69, 'cyan'],     # 6
-        [0.7, 'orange'], [0.79, 'orange'], # 7
-        [0.8, 'brown'], [1.0, 'brown']     # 8+
-    ]
+    # New discrete colors mapping
+    # 0: Gray (Fallback)
+    # 1: A (Red)
+    # 2: B (Green)
+    # 3: AB (Yellow)
+    # 4: L (Blue)
+    
+    # Mixtures:
+    # 5, 6: A+L (Red, Blue)
+    # 7, 8: B+L (Green, Blue)
+    # 9, 10: AB+L (Yellow, Blue)
+    # 11, 12: A+B (Red, Green)
+    # 13, 14: A+AB (Red, Yellow)
+    # 15, 16: B+AB (Green, Yellow)
+    
+    # We construct the colorscale manually to ensure hard edges
+    # Each integer K gets a band.
+    
+    
+
+    color_map_def = {
+        1: c_A, 2: c_B, 3: c_AB, 4: c_L,
+        5: c_A, 6: c_L,    # A+L
+        7: c_B, 8: c_L,    # B+L
+        9: c_AB, 10: c_L,  # AB+L
+        11: c_A, 12: c_B,  # A+B
+        13: c_A, 14: c_AB, # A+AB
+        15: c_B, 16: c_AB  # B+AB
+    }
+    
+    discrete_colors = build_discrete_scale(color_map_def)
 
     # Map color codes to text descriptions for hover
-    # 0: Fallback, 1: A, 2: B, 3: AB, 4: L
-    # 5: A+L, 6: B+L, 7: AB+L, 8: Solid Mix
+    # We map the pair items to the SAME string name
     
     code_to_name = {
-        0: 'Unknown', 1: 'Phase A', 2: 'Phase B', 3: 'Phase AB', 4: 'Liquid',
-        5: 'A + Liquid', 6: 'B + Liquid', 7: 'AB + Liquid', 8: 'Solid Mixture (A+B)',
-        9: 'Solid Mixture (A+AB)', 10: 'Solid Mixture (B+AB)'
+        0: 'Unknown', 
+        1: 'Phase A', 2: 'Phase B', 3: 'Phase AB', 4: 'Liquid',
+        5: 'A + Liquid', 6: 'A + Liquid',
+        7: 'B + Liquid', 8: 'B + Liquid',
+        9: 'AB + Liquid', 10: 'AB + Liquid',
+        11: 'Solid Mixture (A+B)', 12: 'Solid Mixture (A+B)',
+        13: 'Solid Mixture (A+AB)', 14: 'Solid Mixture (A+AB)',
+        15: 'Solid Mixture (B+AB)', 16: 'Solid Mixture (B+AB)'
     }
     
     # Vectorize the mapping
@@ -340,7 +365,7 @@ def visualize_convex_hull(G_data, phases, x, T_range, camera=None):
     scatter_two_phase = go.Surface(
         x=xx, y=yy, z=lower_hull_Z, 
         surfacecolor=lower_hull_Colors,
-        cmin=0, cmax=10,
+        cmin=0, cmax=16,
         colorscale=discrete_colors,
         name='Equilibrium',
         showscale=False,
@@ -376,3 +401,53 @@ def visualize_convex_hull(G_data, phases, x, T_range, camera=None):
     
     fig = go.Figure(data=[scatter_A, scatter_B, scatter_AB, scatter_liquid, scatter_two_phase], layout=layout)
     return fig
+
+# Helper to build the scale list
+def build_discrete_scale(mapping):
+    # mapping: dict {int_code: color_string}
+    # returns list of [[val, col], [val, col], ...]
+    
+    scale = []
+    cmax = 16.0
+    
+    # 0: Fallback
+    scale.append([0.0, 'gray'])
+    scale.append([0.5/cmax, 'gray'])
+    
+    for k, col in mapping.items():
+        # range k-0.5 to k+0.5
+        start = (k - 0.5) / cmax
+        end = (k + 0.5) / cmax
+        # Clip 0-1
+        start = max(0, start)
+        end = min(1, end)
+        
+        scale.append([start, col])
+        scale.append([end, col])
+        
+    return scale
+
+# We define base 'mixture types' here first to identify them.
+# 5: A + L
+# 6: B + L
+# 7: AB + L
+# 8: A + B
+# 9: A + AB
+# 10: B + AB
+
+def get_mixture_type(p1, p2):
+    s = frozenset([p1, p2])
+    if len(s) == 1:
+        p = list(s)[0]
+        if p == 0: return 1 # A
+        if p == 1: return 2 # B
+        if p == 2: return 3 # AB
+        if p == 3: return 4 # L
+    else:
+        if s == frozenset([0, 3]): return 5 # A + L
+        if s == frozenset([1, 3]): return 6 # B + L
+        if s == frozenset([2, 3]): return 7 # AB + L
+        if s == frozenset([0, 1]): return 8 # A + B
+        if s == frozenset([0, 2]): return 9 # A + AB
+        if s == frozenset([1, 2]): return 10 # B + AB
+    return 0 # Fallback
